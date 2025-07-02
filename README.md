@@ -2,7 +2,7 @@
 
 Este es un script de usuario para Tampermonkey que mejora el Editor de Contenido Enriquecido (RCE) de Canvas LMS, añadiendo una potente herramienta para crear y personalizar botones de llamada a la acción (CTA) de forma rápida e intuitiva.
 
-![Imagen de un botón de ejemplo creado con el script](https://i.imgur.com/gO5g5d8.png)
+![Imagen de un botón de ejemplo creado con el script](https://github.com/PabloGGuizar/fabrica-de-botones/blob/main/src/Boton.jpg)
 
 ## ¿Qué problema resuelve?
 
