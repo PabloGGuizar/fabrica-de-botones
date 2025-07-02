@@ -44,7 +44,7 @@ Para usar este script, necesitas la extensión de navegador Tampermonkey.
 
 3.  **Copia y Pega el Código:**
     * Borra todo el código de ejemplo que aparece.
-    * Copia el contenido completo del archivo `canvas-button-creator.user.js` y pégalo en el editor de Tampermonkey.
+    * Copia el contenido completo del archivo `fabrica-de-botones/script.js` y pégalo en el editor de Tampermonkey.
 
 4.  **Guarda el Script:**
     * Ve a `Archivo > Guardar` en el editor de Tampermonkey o presiona `Ctrl + S`.
