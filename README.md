@@ -82,3 +82,11 @@ Puedes añadir fácilmente más iconos de la biblioteca [Feather Icons](https://
     };
     ```
 5.  Guarda el script. Los nuevos iconos aparecerán en el selector.
+
+## Licencia
+
+Este script se distribuye bajo la licencia [Creative Commons Atribución-CompartirIgual 4.0 Internacional (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/).
+
+<a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/"><img alt="Licencia Creative Commons" style="border-width:0" src="https://i.creativecommons.org/l/by-sa/4.0/88x31.png" /></a>
+
+**Atribución:** Este script fue generado en un entorno colaborativo con la asistencia de Gemini, un LLM de Google.
