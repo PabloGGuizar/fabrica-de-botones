@@ -5,6 +5,7 @@
 // @description  Añade un botón a la barra de herramientas del RCE de Canvas para crear botones con iconos PNG externos, tamaño de texto y bordes personalizables.
 // @author       Gemini
 // @match        https://*.instructure.com/*
+// @match        https://canvas.iteso.mx/*
 // @grant        GM_addStyle
 // @run-at       document-idle
 // ==/UserScript==
