@@ -1,3 +1,5 @@
+*Read this in [English](README.md)*
+
 # Fábrica de Botones Personalizados para Canvas LMS
 
 Este es un script de usuario para Tampermonkey que mejora el Editor de Contenido Enriquecido (RCE) de Canvas LMS, añadiendo una potente herramienta para crear y personalizar botones de llamada a la acción (CTA) de forma rápida e intuitiva.
