@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Canvas RCE - Fábrica de botones
+// @name         Canvas RCE - Fábrica de botones / Button Factory
 // @namespace    http://tampermonkey.net/
-// @version      3.1
-// @description  Añade un botón a la barra de herramientas del RCE de Canvas para crear botones con iconos PNG externos, tamaño de texto y bordes personalizables.
+// @version      3.2
+// @description  Añade un botón a la barra de herramientas del RCE de Canvas para crear botones con iconos PNG externos, tamaño de texto y bordes personalizables. / Adds a button to the Canvas RCE toolbar to create buttons.
 // @author       Gemini
 // @match        https://*.instructure.com/*
 // @match        https://canvas.iteso.mx/*
@@ -13,9 +13,9 @@
 (function() {
     'use strict';
 
-    // --- ESTILOS CSS PARA LA VENTANA MODAL Y EL BOTÓN DE LA BARRA DE HERRAMIENTAS ---
+    // --- CSS STYLES FOR THE MODAL WINDOW AND TOOLBAR BUTTON ---
     GM_addStyle(`
-        /* Estilos para la ventana modal y sus componentes */
+        /* Styles for the modal window and its components */
         #customButtonModal {
             display: none; position: fixed; z-index: 99999;
             left: 0; top: 0; width: 100%; height: 100%;
@@ -33,6 +33,21 @@
             align-items: center; border-bottom: 1px solid #ddd; padding-bottom: 10px;
         }
         .modal-header h2 { margin: 0; font-size: 1.5em; }
+        
+        /* Language Toggle Styles */
+        .lang-toggle {
+            margin-left: auto; margin-right: 20px;
+            display: flex; gap: 5px;
+        }
+        .lang-btn {
+            background: #f1f1f1; border: 1px solid #ccc;
+            padding: 4px 8px; border-radius: 4px; cursor: pointer;
+            font-size: 0.8em; font-weight: bold; color: #555;
+        }
+        .lang-btn.active {
+            background: #007bff; color: white; border-color: #007bff;
+        }
+
         .close-button { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; }
         .close-button:hover, .close-button:focus { color: black; }
         .form-section, .preview-section { padding: 10px; grid-column: 1 / -1; }
@@ -63,7 +78,7 @@
         #cancelBtn { background-color: #6c757d; color: white; }
         #cancelBtn:hover { background-color: #5a6268; }
 
-        /* --- ESTILOS PARA SELECTORES VISUALES --- */
+        /* --- STYLES FOR VISUAL SELECTORS --- */
         .style-options-container { display: flex; gap: 10px; flex-wrap: wrap; }
         .style-option {
             border: 2px solid #ccc; background-color: #f8f8f8; border-radius: 4px;
@@ -92,7 +107,7 @@
         #border-width-options .style-option[data-value="2px"] div { border-width: 2px; }
         #border-width-options .style-option[data-value="4px"] div { border-width: 4px; }
 
-        /* --- NUEVOS ESTILOS PARA ICONOS DE IMAGEN --- */
+        /* --- STYLES FOR IMAGE ICONS --- */
         .icon-selector-container {
             display: grid; grid-template-columns: repeat(auto-fill, minmax(45px, 1fr));
             gap: 8px; padding: 10px; border: 1px solid #ddd;
@@ -104,19 +119,101 @@
         #preview-area img { vertical-align: middle; width: 1.2em; height: 1.2em; }
     `);
 
-    // --- LÓGICA DEL SCRIPT ---
+    // --- SCRIPT LOGIC ---
 
     const SCRIPT_ID = 'custom-rce-button-script';
+    let currentLang = 'es'; // Default language
 
-    const ICON_MAP = {
-        'Enlace': 'link', 'Abrir en nueva pestaña': 'external-link', 'Descargar': 'download',
-        'Flecha derecha': 'arrow-right', 'Flecha izquierda': 'arrow-left', 'Información': 'info',
-        'Ayuda': 'help-circle', 'Completado': 'check-circle', 'Calendario': 'calendar',
-        'Inicio': 'home', 'Documento': 'file-text', 'Video': 'video', 'Audio': 'mic',
-        'Imagen': 'image', 'Editar': 'edit', 'Ver': 'eye', 'Añadir': 'plus-circle',
-        'Advertencia': 'alert-triangle', 'Libro': 'book-open', 'Premio': 'award',
-        'Discusión': 'message-square', 'Grupo': 'users', 'Portapapeles': 'clipboard'
+    // i18n Dictionary
+    const i18n = {
+        es: {
+            title: "Fábrica de botones",
+            btnTextLabel: "1. Texto del botón:",
+            btnTextDefault: "Haz Clic Aquí",
+            btnLinkLabel: "2. URL del enlace:",
+            colorsLabel: "3. Colores",
+            bgColorTitle: "Color de fondo",
+            textColorTitle: "Color de texto",
+            paddingLabel: "4. Tamaño (padding):",
+            radiusLabel: "5. Borde Redondeado:",
+            fontSizeLabel: "6. Tamaño de Texto:",
+            borderWidthLabel: "7. Grosor del Borde:",
+            borderColorLabel: "8. Color del Borde:",
+            iconLabel: "9. Icono (Opcional):",
+            iconPosLabel: "Posición del Icono:",
+            iconPosLeft: "Izquierda",
+            iconPosRight: "Derecha",
+            previewTitle: "Vista Previa",
+            cancelBtn: "Cancelar",
+            insertBtn: "Insertar Botón",
+            alertNoEditor: "No se pudo encontrar el editor de Canvas.",
+            alertNoInstance: "No se pudo obtener la instancia del editor de Canvas.",
+            alertNoTextLink: "Por favor, ingresa el texto y la URL del botón.",
+            previewFallback: "Botón",
+            tooltipButton: "Crear Botón Personalizado",
+            iconNone: "Ninguno",
+            sizes: ["Pequeño", "Normal", "Grande", "Extra Grande"],
+            radiuses: ["Recto", "Poco Redondeado", "Muy Redondeado", "Píldora"],
+            fontSizes: ["Pequeño", "Normal", "Grande"],
+            borders: ["Ninguno", "Delgado", "Grueso", "Muy Grueso"],
+            icons: {
+                'link': 'Enlace', 'external-link': 'Abrir en nueva pestaña', 'download': 'Descargar',
+                'arrow-right': 'Flecha derecha', 'arrow-left': 'Flecha izquierda', 'info': 'Información',
+                'help-circle': 'Ayuda', 'check-circle': 'Completado', 'calendar': 'Calendario',
+                'home': 'Inicio', 'file-text': 'Documento', 'video': 'Video', 'mic': 'Audio',
+                'image': 'Imagen', 'edit': 'Editar', 'eye': 'Ver', 'plus-circle': 'Añadir',
+                'alert-triangle': 'Advertencia', 'book-open': 'Libro', 'award': 'Premio',
+                'message-square': 'Discusión', 'users': 'Grupo', 'clipboard': 'Portapapeles'
+            }
+        },
+        en: {
+            title: "Button Factory",
+            btnTextLabel: "1. Button Text:",
+            btnTextDefault: "Click Here",
+            btnLinkLabel: "2. Link URL:",
+            colorsLabel: "3. Colors",
+            bgColorTitle: "Background Color",
+            textColorTitle: "Text Color",
+            paddingLabel: "4. Size (padding):",
+            radiusLabel: "5. Border Radius:",
+            fontSizeLabel: "6. Text Size:",
+            borderWidthLabel: "7. Border Thickness:",
+            borderColorLabel: "8. Border Color:",
+            iconLabel: "9. Icon (Optional):",
+            iconPosLabel: "Icon Position:",
+            iconPosLeft: "Left",
+            iconPosRight: "Right",
+            previewTitle: "Preview",
+            cancelBtn: "Cancel",
+            insertBtn: "Insert Button",
+            alertNoEditor: "Could not find the Canvas editor.",
+            alertNoInstance: "Could not get the Canvas editor instance.",
+            alertNoTextLink: "Please enter the button text and URL.",
+            previewFallback: "Button",
+            tooltipButton: "Create Custom Button",
+            iconNone: "None",
+            sizes: ["Small", "Normal", "Large", "Extra Large"],
+            radiuses: ["Straight", "Slightly Rounded", "Very Rounded", "Pill"],
+            fontSizes: ["Small", "Normal", "Large"],
+            borders: ["None", "Thin", "Thick", "Very Thick"],
+            icons: {
+                'link': 'Link', 'external-link': 'Open in new tab', 'download': 'Download',
+                'arrow-right': 'Arrow right', 'arrow-left': 'Arrow left', 'info': 'Information',
+                'help-circle': 'Help', 'check-circle': 'Completed', 'calendar': 'Calendar',
+                'home': 'Home', 'file-text': 'Document', 'video': 'Video', 'mic': 'Audio',
+                'image': 'Image', 'edit': 'Edit', 'eye': 'View', 'plus-circle': 'Add',
+                'alert-triangle': 'Warning', 'book-open': 'Book', 'award': 'Award',
+                'message-square': 'Discussion', 'users': 'Group', 'clipboard': 'Clipboard'
+            }
+        }
     };
+
+    const ICON_LIST = [
+        'link', 'external-link', 'download', 'arrow-right', 'arrow-left', 'info',
+        'help-circle', 'check-circle', 'calendar', 'home', 'file-text', 'video', 'mic',
+        'image', 'edit', 'eye', 'plus-circle', 'alert-triangle', 'book-open', 'award',
+        'message-square', 'users', 'clipboard'
+    ];
 
     function initialize() {
         createModal();
@@ -137,8 +234,8 @@
         const buttonContainer = document.createElement('div');
         buttonContainer.id = SCRIPT_ID;
         buttonContainer.className = 'tox-tbtn custom-rce-button';
-        buttonContainer.title = 'Crear Botón Personalizado';
-        buttonContainer.setAttribute('aria-label', 'Crear Botón Personalizado');
+        buttonContainer.title = i18n[currentLang].tooltipButton;
+        buttonContainer.setAttribute('aria-label', i18n[currentLang].tooltipButton);
         buttonContainer.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M17,3H7A2,2 0 0,0 5,5V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V5A2,2 0 0,0 17,3M17,19H7V5H17V19M13,11H15V13H13V15H11V13H9V11H11V9H13V11Z" /></svg>`;
         buttonWrapper.appendChild(buttonContainer);
         toolbar.appendChild(buttonWrapper);
@@ -156,16 +253,17 @@
                     if (parentElement && parentElement.tagName === 'A') { selectedHref = parentElement.href; }
                 }
             }
-            document.getElementById('btnText').value = selectedText || 'Haz Clic Aquí';
+            
+            // Set default text if none selected
+            const defaultText = i18n[currentLang].btnTextDefault;
+            document.getElementById('btnText').value = selectedText || defaultText;
             document.getElementById('btnLink').value = selectedHref || '';
             document.getElementById('customButtonModal').style.display = 'block';
             updatePreview();
         });
     }
 
-    function getIconUrl(iconKey, color) {
-        const iconFileName = ICON_MAP[iconKey];
-        if (!iconFileName) return '';
+    function getIconUrl(iconFileName, color) {
         return `https://api.iconify.design/feather/${iconFileName}.svg?color=${encodeURIComponent(color)}`;
     }
 
@@ -174,41 +272,62 @@
         const modal = document.createElement('div');
         modal.id = 'customButtonModal';
 
-        let iconOptionsHtml = '<div class="style-option icon-option selected" title="Ninguno" data-value="">-</div>';
-        for (const key in ICON_MAP) {
-            const iconUrl = getIconUrl(key, 'black');
-            iconOptionsHtml += `<div class="style-option icon-option" title="${key}" data-value="${key}"><img src="${iconUrl}"></div>`;
-        }
+        let iconOptionsHtml = `<div class="style-option icon-option selected" id="iconOptNone" data-value="">-</div>`;
+        ICON_LIST.forEach(iconName => {
+            const iconUrl = getIconUrl(iconName, 'black');
+            iconOptionsHtml += `<div class="style-option icon-option" id="iconOpt_${iconName}" data-value="${iconName}"><img src="${iconUrl}"></div>`;
+        });
 
         modal.innerHTML = `
             <div class="modal-content">
-                <div class="modal-header"><h2>Fábrica de botones</h2><span class="close-button">&times;</span></div>
-                <div class="form-section">
-                    <div class="form-group"><label for="btnText">1. Texto del botón:</label><input type="text" id="btnText" value="Haz Clic Aquí"></div>
-                    <div class="form-group"><label for="btnLink">2. URL del enlace:</label><input type="url" id="btnLink" placeholder="https://ejemplo.com"></div>
-                    <div class="form-group color-inputs">
-                        <div><label>3. Colores</label><input type="color" id="bgColor" value="#007bff" title="Color de fondo"></div>
-                        <div><label>&nbsp;</label><input type="color" id="textColor" value="#ffffff" title="Color de texto"></div>
+                <div class="modal-header">
+                    <h2 id="lblTitle">Fábrica de botones</h2>
+                    <div class="lang-toggle">
+                        <button id="langEs" class="lang-btn active">ES</button>
+                        <button id="langEn" class="lang-btn">EN</button>
                     </div>
-                    <div class="form-group"><label>4. Tamaño (padding):</label><div id="padding-options" class="style-options-container">...</div></div>
-                    <div class="form-group"><label>5. Borde Redondeado:</label><div id="radius-options" class="style-options-container">...</div></div>
-                    <div class="form-group"><label>6. Tamaño de Texto:</label><div id="font-size-options" class="style-options-container">...</div></div>
-                    <div class="form-group"><label>7. Grosor del Borde:</label><div id="border-width-options" class="style-options-container">...</div></div>
-                    <div class="form-group"><label for="borderColor">8. Color del Borde:</label><input type="color" id="borderColor" value="#000000"></div>
-                    <div class="form-group"><label>9. Icono (Opcional):</label><div id="icon-selector" class="icon-selector-container">${iconOptionsHtml}</div></div>
-                    <div class="form-group"><label>Posición del Icono:</label><div id="icon-position-selector"><label><input type="radio" name="iconPos" value="left" checked> Izquierda</label><label><input type="radio" name="iconPos" value="right"> Derecha</label></div></div>
+                    <span class="close-button">&times;</span>
                 </div>
-                <div class="preview-section"><h3>Vista Previa</h3><div id="preview-area"><a id="previewButton" href="#" onclick="return false;"></a></div></div>
+                <div class="form-section">
+                    <div class="form-group"><label id="lblBtnText" for="btnText">1. Texto del botón:</label><input type="text" id="btnText"></div>
+                    <div class="form-group"><label id="lblBtnLink" for="btnLink">2. URL del enlace:</label><input type="url" id="btnLink" placeholder="https://..."></div>
+                    <div class="form-group color-inputs">
+                        <div><label id="lblColors">3. Colores</label><input type="color" id="bgColor" value="#007bff"></div>
+                        <div><label>&nbsp;</label><input type="color" id="textColor" value="#ffffff"></div>
+                    </div>
+                    <div class="form-group"><label id="lblPadding">4. Tamaño (padding):</label><div id="padding-options" class="style-options-container">...</div></div>
+                    <div class="form-group"><label id="lblRadius">5. Borde Redondeado:</label><div id="radius-options" class="style-options-container">...</div></div>
+                    <div class="form-group"><label id="lblFontSize">6. Tamaño de Texto:</label><div id="font-size-options" class="style-options-container">...</div></div>
+                    <div class="form-group"><label id="lblBorderWidth">7. Grosor del Borde:</label><div id="border-width-options" class="style-options-container">...</div></div>
+                    <div class="form-group"><label id="lblBorderColor" for="borderColor">8. Color del Borde:</label><input type="color" id="borderColor" value="#000000"></div>
+                    <div class="form-group"><label id="lblIcon">9. Icono (Opcional):</label><div id="icon-selector" class="icon-selector-container">${iconOptionsHtml}</div></div>
+                    <div class="form-group"><label id="lblIconPos">Posición del Icono:</label>
+                        <div id="icon-position-selector">
+                            <label><input type="radio" name="iconPos" value="left" checked> <span id="lblIconPosLeft">Izquierda</span></label>
+                            <label><input type="radio" name="iconPos" value="right"> <span id="lblIconPosRight">Derecha</span></label>
+                        </div>
+                    </div>
+                </div>
+                <div class="preview-section"><h3 id="lblPreviewTitle">Vista Previa</h3><div id="preview-area"><a id="previewButton" href="#" onclick="return false;"></a></div></div>
                 <div class="modal-footer"><button id="cancelBtn">Cancelar</button><button id="insertBtn">Insertar Botón</button></div>
             </div>`;
 
-        modal.querySelector('#padding-options').innerHTML = `<div class="style-option" title="Pequeño" data-value="5px 10px"><span></span></div><div class="style-option selected" title="Normal" data-value="10px 20px"><span></span></div><div class="style-option" title="Grande" data-value="15px 30px"><span></span></div><div class="style-option" title="Extra Grande" data-value="20px 40px"><span></span></div>`;
-        modal.querySelector('#radius-options').innerHTML = `<div class="style-option" title="Recto" data-value="0px"></div><div class="style-option selected" title="Poco Redondeado" data-value="5px"></div><div class="style-option" title="Muy Redondeado" data-value="15px"></div><div class="style-option" title="Píldora" data-value="999px"></div>`;
-        modal.querySelector('#font-size-options').innerHTML = `<div class="style-option" title="Pequeño" data-value="0.85em" style="font-size: 0.85em;">Aa</div><div class="style-option selected" title="Normal" data-value="1em" style="font-size: 1em;">Aa</div><div class="style-option" title="Grande" data-value="1.2em" style="font-size: 1.2em;">Aa</div>`;
-        modal.querySelector('#border-width-options').innerHTML = `<div class="style-option selected" title="Ninguno" data-value="0px"><div></div></div><div class="style-option" title="Delgado" data-value="1px"><div></div></div><div class="style-option" title="Grueso" data-value="2px"><div></div></div><div class="style-option" title="Muy Grueso" data-value="4px"><div></div></div>`;
+        // Add structural HTML for style options (titles are handled in updateLanguageUI)
+        modal.querySelector('#padding-options').innerHTML = `<div class="style-option" data-value="5px 10px"><span></span></div><div class="style-option selected" data-value="10px 20px"><span></span></div><div class="style-option" data-value="15px 30px"><span></span></div><div class="style-option" data-value="20px 40px"><span></span></div>`;
+        modal.querySelector('#radius-options').innerHTML = `<div class="style-option" data-value="0px"></div><div class="style-option selected" data-value="5px"></div><div class="style-option" data-value="15px"></div><div class="style-option" data-value="999px"></div>`;
+        modal.querySelector('#font-size-options').innerHTML = `<div class="style-option" data-value="0.85em" style="font-size: 0.85em;">Aa</div><div class="style-option selected" data-value="1em" style="font-size: 1em;">Aa</div><div class="style-option" data-value="1.2em" style="font-size: 1.2em;">Aa</div>`;
+        modal.querySelector('#border-width-options').innerHTML = `<div class="style-option selected" data-value="0px"><div></div></div><div class="style-option" data-value="1px"><div></div></div><div class="style-option" data-value="2px"><div></div></div><div class="style-option" data-value="4px"><div></div></div>`;
 
         document.body.appendChild(modal);
 
+        // Language toggle events
+        document.getElementById('langEs').addEventListener('click', () => updateLanguageUI('es'));
+        document.getElementById('langEn').addEventListener('click', () => updateLanguageUI('en'));
+
+        // Initialize UI with default language
+        updateLanguageUI(currentLang);
+
+        // Event Listeners
         modal.querySelector('.close-button').addEventListener('click', () => modal.style.display = 'none');
         modal.querySelector('#cancelBtn').addEventListener('click', () => modal.style.display = 'none');
         modal.querySelector('#insertBtn').addEventListener('click', insertButton);
@@ -225,6 +344,72 @@
                 updatePreview();
             });
         });
+    }
+
+    function updateLanguageUI(lang) {
+        currentLang = lang;
+        const t = i18n[lang];
+
+        // Update labels and buttons
+        document.getElementById('lblTitle').textContent = t.title;
+        document.getElementById('lblBtnText').textContent = t.btnTextLabel;
+        document.getElementById('lblBtnLink').textContent = t.btnLinkLabel;
+        document.getElementById('lblColors').textContent = t.colorsLabel;
+        document.getElementById('lblPadding').textContent = t.paddingLabel;
+        document.getElementById('lblRadius').textContent = t.radiusLabel;
+        document.getElementById('lblFontSize').textContent = t.fontSizeLabel;
+        document.getElementById('lblBorderWidth').textContent = t.borderWidthLabel;
+        document.getElementById('lblBorderColor').textContent = t.borderColorLabel;
+        document.getElementById('lblIcon').textContent = t.iconLabel;
+        document.getElementById('lblIconPos').textContent = t.iconPosLabel;
+        document.getElementById('lblIconPosLeft').textContent = t.iconPosLeft;
+        document.getElementById('lblIconPosRight').textContent = t.iconPosRight;
+        document.getElementById('lblPreviewTitle').textContent = t.previewTitle;
+        document.getElementById('cancelBtn').textContent = t.cancelBtn;
+        document.getElementById('insertBtn').textContent = t.insertBtn;
+
+        // Update titles for inputs
+        document.getElementById('bgColor').title = t.bgColorTitle;
+        document.getElementById('textColor').title = t.textColorTitle;
+        
+        // Update button text input if it holds the default value of the other language
+        const btnTextInput = document.getElementById('btnText');
+        const otherLang = lang === 'es' ? 'en' : 'es';
+        if (btnTextInput.value === i18n[otherLang].btnTextDefault || btnTextInput.value === '') {
+            btnTextInput.value = t.btnTextDefault;
+        }
+
+        // Update style option tooltips
+        const updateTooltips = (containerId, arrayKeys) => {
+            const options = document.querySelectorAll(`#${containerId} .style-option`);
+            options.forEach((opt, index) => {
+                if (t[arrayKeys][index]) opt.title = t[arrayKeys][index];
+            });
+        };
+        updateTooltips('padding-options', 'sizes');
+        updateTooltips('radius-options', 'radiuses');
+        updateTooltips('font-size-options', 'fontSizes');
+        updateTooltips('border-width-options', 'borders');
+
+        // Update icon tooltips
+        document.getElementById('iconOptNone').title = t.iconNone;
+        ICON_LIST.forEach(iconName => {
+            const el = document.getElementById(`iconOpt_${iconName}`);
+            if (el && t.icons[iconName]) el.title = t.icons[iconName];
+        });
+
+        // Update language toggle buttons active state
+        document.getElementById('langEs').classList.toggle('active', lang === 'es');
+        document.getElementById('langEn').classList.toggle('active', lang === 'en');
+
+        // Update main toolbar button tooltip if it exists
+        const mainToolbarBtn = document.getElementById(SCRIPT_ID);
+        if (mainToolbarBtn) {
+            mainToolbarBtn.title = t.tooltipButton;
+            mainToolbarBtn.setAttribute('aria-label', t.tooltipButton);
+        }
+
+        updatePreview();
     }
 
     function updatePreview() {
@@ -262,27 +447,28 @@
             iconHtml = `<img src="${iconUrl}" style="width:1.2em; height:1.2em; vertical-align:middle; border:none;" alt="">`;
         }
 
-        const textHtml = `<span>${text || "Botón"}</span>`;
+        const fallbackText = i18n[currentLang].previewFallback;
+        const textHtml = `<span>${text || fallbackText}</span>`;
         previewButton.innerHTML = (iconPos === 'left') ? (iconHtml + textHtml) : (textHtml + iconHtml);
     }
 
     function insertButton() {
-        // 1. Encontrar el ID del editor activo
+        // 1. Find the ID of the active editor
         const editorFrame = document.querySelector('iframe.tox-edit-area__iframe');
         if (!editorFrame || !editorFrame.id) {
-            alert('No se pudo encontrar el editor de Canvas.');
+            alert(i18n[currentLang].alertNoEditor);
             return;
         }
         const editorId = editorFrame.id.replace('_ifr', '');
 
-        // 2. Obtener la instancia del editor desde la variable global `tinymce`
+        // 2. Get the editor instance from the global tinymce variable
         const editor = tinymce.get(editorId);
         if (!editor) {
-            alert('No se pudo obtener la instancia del editor de Canvas.');
+            alert(i18n[currentLang].alertNoInstance);
             return;
         }
 
-        // 3. Recolectar todos los valores
+        // 3. Collect all values
         const text = document.getElementById('btnText').value;
         const link = document.getElementById('btnLink').value;
         const bgColor = document.getElementById('bgColor').value;
@@ -296,11 +482,11 @@
         const iconPos = document.querySelector('input[name="iconPos"]:checked').value;
 
         if (!text || !link) {
-            alert('Por favor, ingresa el texto y la URL del botón.');
+            alert(i18n[currentLang].alertNoTextLink);
             return;
         }
 
-        // 4. Construir el HTML limpio
+        // 4. Build clean HTML
         const styleProps = [
             `background-color: ${bgColor}`,
             `color: ${textColor}`,
@@ -332,10 +518,10 @@
         const innerHtml = (iconPos === 'left') ? (iconHtml + textHtml) : (textHtml + iconHtml);
         const buttonHtml = `<a href="${link}" target="_blank" style="${styles}">${innerHtml}</a>`;
 
-        // 5. Usar la API del editor para insertar el contenido
+        // 5. Use the editor API to insert the content
         editor.insertContent(buttonHtml + '&nbsp;');
 
-        // 6. Cerrar la modal
+        // 6. Close the modal
         document.getElementById('customButtonModal').style.display = 'none';
     }
 
